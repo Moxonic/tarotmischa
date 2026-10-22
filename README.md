@@ -4,11 +4,11 @@ A mobile-first tarot app you explore by swiping. It opens by asking which of sev
 
 | Deck | Era | Cards | Scans |
 | --- | --- | --- | --- |
-| Visconti-Sforza | 1450s, Milan | 78 | Pierpont Morgan–Bergamo deck. The Devil, Tower, Three of Swords and Knight of Coins are lost, and there is no public scan of the King of Cups. These cards show placeholders. |
+| Visconti-Sforza | 1450s, Milan | 78 | Pierpont Morgan–Bergamo deck. Its lost cards are filled with stand-ins: the King of Cups, Knight of Coins and Three of Swords from the Cary-Yale Visconti deck (same workshop), the Tower from the 15th-century "Charles VI" tarot, and the Devil as a fragment of the Cary Sheet (Milan, c. 1500). |
 | Sola Busca | 1491, Italy | 78 | Complete. |
 | Minchiate | 1500s, Florence | 97 | A Florentine printing from 1860–1890. Includes the extra trumps: virtues, elements and zodiac. |
 | Tarot de Marseille | 1600s–1700s, France | 78 | Arnoult edition, 1748 (BnF). |
-| Etteilla | 1780s, Paris | 78 | Pussey edition (BnF). Five cards are missing from the scanned copy. |
+| Etteilla | 1780s, Paris | 78 | Pussey edition (BnF). Jugement and Mortalité come from another copy of the Pussey edition and Folie from the Grimaud printing. The Aces of Cups and Swords still show placeholders. |
 | Oswald Wirth | 1889, Paris | 22 | The Major Arcana, as Wirth published them. |
 | Rider Waite Smith | 1909, London | 78 | The 1909 "Roses & Lilies" first edition. |
 

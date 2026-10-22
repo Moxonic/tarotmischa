@@ -28,6 +28,12 @@
     copy: 'This card is missing from the surviving copy that was scanned; its meaning is still read here.',
     missing: 'No image of this card was available.',
   };
+  const STAND_IN_INTRO = {
+    lost: "This card of the original deck is lost.",
+    unscanned: 'The original survives in Bergamo, but no public-domain scan of it was available.',
+    copy: 'This card is missing from the surviving copy that was scanned.',
+    missing: 'No image of the original card was available.',
+  };
   const MISSING_LABEL = { lost: 'Lost card', unscanned: 'Not pictured', copy: 'Missing from this copy', missing: 'Not pictured' };
 
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
@@ -590,7 +596,9 @@
     $('m1-text').textContent = rev ? m.rev : m.up;
     $('m2-title').textContent = rev ? 'When upright' : 'When reversed';
     $('m2-text').textContent = rev ? m.up : m.rev;
-    $('sheet-note').textContent = card.miss ? MISSING_NOTE[card.miss] || MISSING_NOTE.missing : '';
+    $('sheet-note').textContent = !card.miss ? ''
+      : card.stand ? `${STAND_IN_INTRO[card.miss] || STAND_IN_INTRO.missing} Shown instead: ${card.stand}.`
+      : MISSING_NOTE[card.miss] || MISSING_NOTE.missing;
     $('sheet-body').scrollTop = 0;
 
     sheetOpen = true;
