@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0e22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="A tarot deck you explore by swiping: all 78 cards, face down, waiting.">
+  <title>Night Tarot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='2' width='20' height='28' rx='3' fill='%23161c40' stroke='%23dcb65c' stroke-width='1.5'/%3E%3Cpolygon points='16,9 18,14 23,16 18,18 16,23 14,18 9,16 14,14' fill='%23dcb65c'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="sky" aria-hidden="true"><div class="sky-twinkle"></div></div>
+
+  <main class="app">
+    <header class="bar">
+      <div class="counter" aria-live="polite">
+        <span class="counter-num" id="count">78</span><span class="counter-total">/ 78</span>
+        <span class="counter-label">in the deck</span>
+      </div>
+      <div class="brand" aria-hidden="true">✦ Night Tarot ✦</div>
+      <div class="actions">
+        <button class="icon-btn" id="sound" type="button" aria-pressed="false" aria-label="Sound off. Turn sound on">
+          <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>
+          <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+        </button>
+        <button class="icon-btn" id="shuffle" type="button" aria-label="Reshuffle the deck">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5c2.5 0 4 1.5 5.5 5s3 5 5.5 5H21"/><path d="M3 17h3.5c1.4 0 2.5-.5 3.4-1.4M14.1 8.4c.9-.9 2-1.4 3.4-1.4H21"/><path d="M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="stage" id="stage">
+      <div class="deck" id="deck" tabindex="0" role="group" aria-roledescription="tarot deck" aria-label="Tarot deck">
+        <div class="halo" id="halo" aria-hidden="true"></div>
+        <div class="layer" aria-hidden="true"></div>
+        <div class="layer" aria-hidden="true"></div>
+        <div class="layer" aria-hidden="true"></div>
+        <div class="sparks" id="sparks" aria-hidden="true"></div>
+        <div class="empty" id="empty" hidden>
+          <p class="empty-title">The deck is spent.</p>
+          <p class="empty-sub">Gather the cards and begin again.</p>
+          <button class="pill-btn" id="empty-shuffle" type="button">Reshuffle</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="hints" id="hints" aria-hidden="true">
+      <span class="hint hint-left"><span class="arrow">‹</span><span id="hint-left">pass</span></span>
+      <span class="hint hint-mid" id="hint-mid">swipe to begin</span>
+      <span class="hint hint-right"><span id="hint-right">reveal</span><span class="arrow">›</span></span>
+    </footer>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true">
+    <div class="sheet-grab" id="sheet-grab"><span></span></div>
+    <div class="sheet-body" id="sheet-body">
+      <p class="sheet-eyebrow" id="sheet-eyebrow"></p>
+      <h2 class="sheet-title" id="sheet-title"></h2>
+      <p class="sheet-orient" id="sheet-orient"></p>
+      <ul class="chips" id="sheet-chips"></ul>
+      <div class="meaning is-primary">
+        <h3 id="m1-title">Upright</h3>
+        <p id="m1-text"></p>
+      </div>
+      <div class="divider" aria-hidden="true">✦</div>
+      <div class="meaning is-secondary">
+        <h3 id="m2-title">Reversed</h3>
+        <p id="m2-text"></p>
+      </div>
+      <button class="pill-btn sheet-close" id="sheet-close" type="button">Return to the deck</button>
+    </div>
+  </section>
+
+  <div class="sr-only" id="announce" aria-live="assertive"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/sound.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

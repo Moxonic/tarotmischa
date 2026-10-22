@@ -1,0 +1,643 @@
+(function () {
+  'use strict';
+
+  const { CARDS } = window.TAROT;
+  const ART = window.TAROT_ART;
+  const SFX = window.TAROT_SFX;
+
+  const $ = (id) => document.getElementById(id);
+  const deckEl = $('deck');
+  const haloEl = $('halo');
+  const sparksEl = $('sparks');
+  const emptyEl = $('empty');
+  const layers = Array.from(deckEl.querySelectorAll('.layer'));
+  const countEl = $('count');
+  const soundBtn = $('sound');
+  const shuffleBtn = $('shuffle');
+  const hintsEl = $('hints');
+  const sheet = $('sheet');
+  const scrim = $('scrim');
+
+  const STORE = 'night-tarot:v1';
+  const REVERSE_CHANCE = 0.3;
+  const LAYER1 = { x: 0, y: 5, rot: -1.1, ry: 0, s: 0.982 };
+
+  const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  let reduced = motionQuery.matches;
+
+  const state = { order: [], index: 0, revealed: false };
+  let top = null;          // { el, inner, entry, pose }
+  let busy = false;
+  let sheetOpen = false;
+  let haloLevel = 0;
+
+  document.documentElement.style.setProperty('--card-back',
+    `url("data:image/svg+xml,${encodeURIComponent(ART.back())}")`);
+
+  /* ---------- helpers ---------- */
+
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const ease = {
+    linear: (t) => t,
+    outCubic: (t) => 1 - Math.pow(1 - t, 3),
+    outQuart: (t) => 1 - Math.pow(1 - t, 4),
+    inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+    outBack: (t) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  };
+
+  function tween(duration, easing, step) {
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const frame = (now) => {
+        const t = clamp((now - t0) / duration, 0, 1);
+        step(easing(t), t);
+        if (t < 1) requestAnimationFrame(frame);
+        else resolve();
+      };
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function haptic(pattern) {
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* unsupported */ }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        order: state.order, index: state.index, revealed: state.revealed, sound: SFX.enabled,
+      }));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE));
+      if (s && Array.isArray(s.order) && s.order.length === CARDS.length &&
+          s.order.every((e) => e && CARDS[e.id]) && Number.isInteger(s.index)) return s;
+    } catch (e) { /* storage unavailable or corrupt */ }
+    return null;
+  }
+
+  function newOrder() {
+    const ids = CARDS.map((c) => c.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    return ids.map((id) => ({ id, rev: Math.random() < REVERSE_CHANCE }));
+  }
+
+  const remaining = () => state.order.length - state.index;
+  const restPose = () => ({ x: 0, y: 0, rot: 0, ry: state.revealed && !reduced ? 180 : 0, s: 1 });
+
+  function setHalo(v) {
+    haloLevel = v;
+    haloEl.style.opacity = v.toFixed(3);
+  }
+
+  function announce(text) {
+    const el = $('announce');
+    el.textContent = '';
+    requestAnimationFrame(() => { el.textContent = text; });
+  }
+
+  /* ---------- cards ---------- */
+
+  function makeCard(entry, pose) {
+    const card = CARDS[entry.id];
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML =
+      `<div class="card-inner"><div class="face back"></div>` +
+      `<div class="face front${entry.rev ? ' is-rev' : ''}"><div class="art">${ART.face(card)}</div><div class="sheen"></div></div></div>`;
+    const c = { el, inner: el.firstChild, entry, pose: { ...pose } };
+    apply(c);
+    return c;
+  }
+
+  function apply(c) {
+    const p = c.pose;
+    c.el.style.transform = `translate3d(${p.x.toFixed(2)}px,${p.y.toFixed(2)}px,0) rotate(${p.rot.toFixed(3)}deg) scale(${p.s.toFixed(4)})`;
+    c.inner.style.transform = `rotateY(${p.ry.toFixed(2)}deg)`;
+  }
+
+  function showTop() {
+    if (top) { top.el.remove(); top = null; }
+    const entry = state.order[state.index];
+    if (entry) {
+      top = makeCard(entry, restPose());
+      if (state.revealed) top.el.classList.add('is-revealed');
+      deckEl.insertBefore(top.el, sparksEl);
+    }
+    setHalo(state.revealed ? 0.3 : 0);
+    renderDeck();
+  }
+
+  function renderDeck() {
+    const left = remaining();
+    countEl.textContent = left;
+    const below = Math.max(0, left - 1);
+    layers.forEach((l, i) => { l.style.opacity = i < Math.min(3, below) ? '1' : '0'; });
+    emptyEl.hidden = left > 0;
+    deckEl.setAttribute('aria-label', left === 0
+      ? 'The deck is empty. Reshuffle to begin again.'
+      : state.revealed
+        ? `${CARDS[top.entry.id].name}${top.entry.rev ? ', reversed' : ''}. Press Enter to read its meaning, or Left Arrow for the next card. ${left} of 78 remain.`
+        : `Face-down card, ${left} of 78 remain. Right Arrow reveals it, Left Arrow passes it.`);
+    renderHints();
+  }
+
+  function renderHints() {
+    const left = remaining();
+    const l = $('hint-left'), r = $('hint-right'), m = $('hint-mid');
+    const [hl, hr] = hintsEl.querySelectorAll('.hint-left, .hint-right');
+    if (left === 0) {
+      l.textContent = 'pass'; r.textContent = 'reveal'; m.textContent = 'reshuffle to continue';
+      hl.classList.add('is-off'); hr.classList.add('is-off');
+    } else if (state.revealed) {
+      l.textContent = 'next'; r.textContent = 'reveal'; m.textContent = 'tap the card to read it';
+      hl.classList.remove('is-off'); hr.classList.add('is-off');
+    } else {
+      l.textContent = 'pass'; r.textContent = 'reveal'; m.textContent = left === 78 ? 'swipe to begin' : '';
+      hl.classList.remove('is-off'); hr.classList.remove('is-off');
+    }
+  }
+
+  /* ---------- reveal ---------- */
+
+  function sparkle() {
+    const n = 22;
+    const w = deckEl.offsetWidth, h = deckEl.offsetHeight;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      s.className = 'spark';
+      // start on the card's perimeter, drift outward
+      const edge = Math.random() * 2 * (w + h);
+      let x, y, nx, ny;
+      if (edge < w) { x = edge; y = 0; nx = 0; ny = -1; }
+      else if (edge < w + h) { x = w; y = edge - w; nx = 1; ny = 0; }
+      else if (edge < 2 * w + h) { x = edge - w - h; y = h; nx = 0; ny = 1; }
+      else { x = 0; y = edge - 2 * w - h; nx = -1; ny = 0; }
+      const dist = 26 + Math.random() * 52;
+      s.style.cssText =
+        `left:${x}px;top:${y}px;--s:${(8 + Math.random() * 12).toFixed(1)}px;` +
+        `--dx:${(nx * dist + (Math.random() - 0.5) * 30).toFixed(1)}px;--dy:${(ny * dist + (Math.random() - 0.5) * 30 - 10).toFixed(1)}px;` +
+        `--r:${Math.round(Math.random() * 180)}deg;--d:${Math.round(800 + Math.random() * 600)}ms;--delay:${Math.round(Math.random() * 160)}ms`;
+      frag.appendChild(s);
+    }
+    sparksEl.appendChild(frag);
+    setTimeout(() => {
+      Array.from(sparksEl.children).slice(0, n).forEach((s) => s.remove());
+    }, 1800);
+  }
+
+  async function reveal() {
+    if (busy || !top || state.revealed) return;
+    busy = true;
+    state.revealed = true;
+    save();
+    const c = top;
+    const card = CARDS[c.entry.id];
+    SFX.flip();
+
+    if (reduced) {
+      c.el.classList.add('is-revealed');
+      haptic(12);
+      const from = { ...c.pose };
+      await tween(300, ease.outCubic, (e) => {
+        c.pose.x = lerp(from.x, 0, e); c.pose.y = lerp(from.y, 0, e);
+        c.pose.rot = lerp(from.rot, 0, e); c.pose.s = lerp(from.s, 1, e);
+        apply(c);
+        setHalo(0.3 * e);
+      });
+    } else {
+      const from = { ...c.pose };
+      let turned = false;
+      await tween(1000, ease.linear, (_, t) => {
+        const e = ease.inOutCubic(t);
+        const settle = ease.outCubic(clamp(t * 1.6, 0, 1));
+        const arc = Math.sin(Math.PI * t);
+        c.pose.x = lerp(from.x, 0, settle);
+        c.pose.y = lerp(from.y, 0, settle) - arc * 18;
+        c.pose.rot = lerp(from.rot, 0, settle) - arc * 3;
+        c.pose.s = lerp(from.s, 1, settle) + arc * 0.08;
+        c.pose.ry = lerp(from.ry, 180, e);
+        apply(c);
+        setHalo(t < 0.55 ? arc * 0.95 : Math.max(0.3, arc * 0.95));
+        if (!turned && c.pose.ry >= 90) {
+          turned = true;
+          haptic(14);
+          sparkle();
+          c.el.querySelector('.sheen').classList.add('play');
+        }
+      });
+      c.el.classList.add('is-revealed');
+    }
+    announce(`${card.name}${c.entry.rev ? ', reversed' : ''}`);
+    renderDeck();
+    busy = false;
+  }
+
+  /* ---------- pass to the next card ---------- */
+
+  async function pass(velocity = 0) {
+    if (busy || !top) return;
+    busy = true;
+    const old = top;
+    const wasHalo = haloLevel;
+    state.index++;
+    state.revealed = false;
+    save();
+
+    const entry = state.order[state.index];
+    top = entry ? makeCard(entry, reduced ? restPose() : LAYER1) : null;
+    if (top) deckEl.insertBefore(top.el, old.el);
+    renderDeck();
+    SFX.pass();
+
+    if (reduced) {
+      if (top) top.el.style.opacity = '0';
+      await tween(260, ease.outCubic, (e) => {
+        old.el.style.opacity = String(1 - e);
+        if (top) top.el.style.opacity = String(e);
+        setHalo(wasHalo * (1 - e));
+      });
+      if (top) top.el.style.opacity = '';
+    } else {
+      const from = { ...old.pose };
+      const w = deckEl.offsetWidth;
+      const toX = -(window.innerWidth / 2 + w * 1.2);
+      const dur = clamp(420 - Math.abs(velocity) * 90, 240, 420);
+      const flight = tween(dur, from.x < -10 ? ease.outCubic : ease.inOutCubic, (e) => {
+        old.pose.x = lerp(from.x, toX, e);
+        old.pose.y = lerp(from.y, from.y + 36, e);
+        old.pose.rot = lerp(from.rot, -24, e);
+        apply(old);
+        setHalo(wasHalo * (1 - e));
+      });
+      const next = top;
+      const rise = next ? tween(460, ease.outCubic, (e) => {
+        const to = restPose();
+        for (const k of ['x', 'y', 'rot', 's']) next.pose[k] = lerp(LAYER1[k], to[k], e);
+        apply(next);
+      }) : null;
+      await Promise.all([flight, rise]);
+    }
+    old.el.remove();
+    busy = false;
+  }
+
+  async function snapBack() {
+    if (!top) return;
+    busy = true;
+    const c = top;
+    const from = { ...c.pose };
+    const to = restPose();
+    const wasHalo = haloLevel;
+    await tween(520, ease.outBack, (e) => {
+      for (const k of ['x', 'y', 'rot', 'ry', 's']) c.pose[k] = lerp(from[k], to[k], e);
+      apply(c);
+      if (state.revealed) setHalo(lerp(wasHalo, 0.3, clamp(e, 0, 1)));
+    });
+    busy = false;
+  }
+
+  async function nudge() {
+    if (busy || !top) return;
+    busy = true;
+    hintsEl.classList.remove('pulse');
+    void hintsEl.offsetWidth;
+    hintsEl.classList.add('pulse');
+    if (!reduced) {
+      await tween(620, ease.linear, (_, t) => {
+        const k = Math.sin(Math.PI * t) * Math.exp(-t * 1.5);
+        top.pose.ry = k * 22;
+        top.pose.s = 1 + k * 0.02;
+        apply(top);
+      });
+      top.pose.ry = 0; top.pose.s = 1; apply(top);
+    }
+    busy = false;
+  }
+
+  /* ---------- reshuffle ---------- */
+
+  async function reshuffle() {
+    if (busy) return;
+    busy = true;
+    closeSheet();
+    shuffleBtn.classList.remove('is-spinning');
+    void shuffleBtn.offsetWidth;
+    shuffleBtn.classList.add('is-spinning');
+
+    const finish = () => {
+      state.order = newOrder();
+      state.index = 0;
+      state.revealed = false;
+      save();
+      showTop();
+      announce('The deck is shuffled. 78 cards remain.');
+    };
+
+    if (reduced || typeof deckEl.animate !== 'function') {
+      SFX.riffle(14, 40);
+      await tween(220, ease.linear, (e) => { deckEl.style.opacity = String(1 - e); });
+      finish();
+      await tween(320, ease.linear, (e) => { deckEl.style.opacity = String(e); });
+      deckEl.style.opacity = '';
+      busy = false;
+      return;
+    }
+
+    const wasHalo = haloLevel;
+    const N = 10;
+    const ov = document.createElement('div');
+    ov.className = 'shuffle';
+    const ghosts = Array.from({ length: N }, (_, i) => {
+      const g = document.createElement('div');
+      g.className = 'ghost';
+      g.style.zIndex = String(i);
+      g.style.transform = `translate3d(0, ${-i * 0.7}px, 0)`;
+      ov.appendChild(g);
+      return g;
+    });
+    const cur = ghosts.map((g) => g.style.transform);
+    deckEl.appendChild(ov);
+    deckEl.classList.add('is-shuffling');
+    tween(200, ease.linear, (e) => setHalo(wasHalo * (1 - e)));
+
+    const move = (i, to, opts) => {
+      const a = ghosts[i].animate([{ transform: cur[i] }, { transform: to }],
+        { fill: 'forwards', easing: 'cubic-bezier(.4,0,.2,1)', ...opts });
+      cur[i] = to;
+      return a.finished;
+    };
+
+    await wait(120);
+    let stackOrder = ghosts.map((_, i) => i);
+    for (let round = 0; round < 2; round++) {
+      // split the deck into two halves
+      SFX.split();
+      const half = N / 2;
+      await Promise.all(stackOrder.map((gi, pos) => {
+        const side = pos < half ? -1 : 1;
+        const h = pos < half ? pos : pos - half;
+        return move(gi, `translate3d(${side * 56}%, ${-h * 0.8 - 6}px, 0) rotate(${side * (7 - round * 2)}deg)`,
+          { duration: round ? 260 : 340 });
+      }));
+      // riffle them back together, alternating sides from the bottom up
+      const left = stackOrder.slice(0, half), right = stackOrder.slice(half);
+      const merged = [];
+      for (let k = 0; k < half; k++) {
+        if (Math.random() < 0.5) merged.push(left[k], right[k]); else merged.push(right[k], left[k]);
+      }
+      const gap = round ? 42 : 55;
+      SFX.riffle(N, gap);
+      await Promise.all(merged.map((gi, k) => {
+        setTimeout(() => { ghosts[gi].style.zIndex = String(10 + round * N + k); }, k * gap);
+        return move(gi, `translate3d(0, ${-k * 0.7}px, 0) rotate(${((Math.random() - 0.5) * 3).toFixed(2)}deg)`,
+          { duration: 200, delay: k * gap, easing: 'cubic-bezier(.3,.6,.3,1)' });
+      }));
+      stackOrder = merged;
+    }
+    // square the deck up
+    await Promise.all(stackOrder.map((gi, k) => move(gi, `translate3d(0, ${-k * 0.4}px, 0) rotate(0deg)`, { duration: 220 })));
+
+    finish();
+    deckEl.classList.remove('is-shuffling');
+    ov.remove();
+    busy = false;
+  }
+
+  /* ---------- meaning sheet ---------- */
+
+  function openSheet() {
+    if (!top || !state.revealed || sheetOpen) return;
+    const card = CARDS[top.entry.id];
+    const rev = top.entry.rev;
+    $('sheet-eyebrow').textContent = card.arcana === 'major' ? `Major Arcana · ${card.label}` : card.group;
+    $('sheet-title').textContent = card.name;
+    $('sheet-orient').innerHTML = rev
+      ? 'Drawn <b>reversed</b>; its energy is blocked, inward or delayed.'
+      : 'Drawn <b>upright</b>.';
+    const chips = $('sheet-chips');
+    chips.innerHTML = '';
+    (rev ? card.rkw : card.kw).forEach((k) => {
+      const li = document.createElement('li');
+      li.textContent = k;
+      chips.appendChild(li);
+    });
+    $('m1-title').textContent = rev ? 'Reversed meaning' : 'Upright meaning';
+    $('m1-text').textContent = rev ? card.rev : card.up;
+    $('m2-title').textContent = rev ? 'When upright' : 'When reversed';
+    $('m2-text').textContent = rev ? card.up : card.rev;
+    $('sheet-body').scrollTop = 0;
+
+    sheetOpen = true;
+    sheet.style.transform = '';
+    sheet.classList.add('is-open');
+    scrim.classList.add('is-open');
+    sheet.setAttribute('aria-hidden', 'false');
+    setTimeout(() => { if (sheetOpen) $('sheet-close').focus({ preventScroll: true }); }, 350);
+  }
+
+  function closeSheet() {
+    if (!sheetOpen) return;
+    sheetOpen = false;
+    sheet.style.transform = '';
+    sheet.classList.remove('is-open', 'is-dragging');
+    scrim.classList.remove('is-open');
+    sheet.setAttribute('aria-hidden', 'true');
+    deckEl.focus({ preventScroll: true });
+  }
+
+  scrim.addEventListener('click', closeSheet);
+  $('sheet-close').addEventListener('click', closeSheet);
+
+  // drag the sheet's handle down to dismiss
+  (function () {
+    const grab = $('sheet-grab');
+    let y0 = null, dy = 0, t0 = 0;
+    grab.addEventListener('pointerdown', (e) => {
+      if (!sheetOpen) return;
+      y0 = e.clientY; dy = 0; t0 = performance.now();
+      grab.setPointerCapture(e.pointerId);
+      sheet.classList.add('is-dragging');
+    });
+    grab.addEventListener('pointermove', (e) => {
+      if (y0 === null) return;
+      dy = Math.max(0, e.clientY - y0);
+      sheet.style.transform = `translate3d(0, ${dy}px, 0)`;
+    });
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      sheet.classList.remove('is-dragging');
+      const fast = dy / Math.max(1, performance.now() - t0) > 0.5;
+      if (dy > 90 || (fast && dy > 24)) closeSheet();
+      else sheet.style.transform = '';
+    };
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+  })();
+
+  /* ---------- gestures on the deck ---------- */
+
+  let drag = null;
+  let dragFrame = 0;
+
+  function dragPose() {
+    if (!drag || !top) return;
+    const { dx, dy, w } = drag;
+    const p = top.pose;
+    const faceUp = state.revealed;
+    if (dx <= 0) {
+      p.x = dx;
+      p.y = dy * 0.15;
+      p.rot = reduced ? 0 : (dx / w) * 14;
+      p.ry = faceUp && !reduced ? 180 : 0;
+      p.s = 1;
+      if (faceUp) setHalo(0.3 * clamp(1 + dx / w, 0, 1));
+    } else if (!faceUp) {
+      // drawing right lifts the card's left edge: a preview of the flip
+      const k = Math.min(1, dx / (w * 0.9));
+      p.x = dx * 0.3;
+      p.y = dy * 0.1;
+      p.rot = reduced ? 0 : (dx / w) * 4;
+      p.ry = reduced ? 0 : 52 * k * (1 - k * 0.35);
+      p.s = 1 + k * 0.03;
+    } else {
+      // a revealed card resists being pushed right
+      const r = w * 0.4 * (1 - 1 / (dx / (w * 0.4) + 1));
+      p.x = r;
+      p.y = dy * 0.08;
+      p.rot = reduced ? 0 : (r / w) * 6;
+      p.ry = reduced ? 0 : 180;
+    }
+    apply(top);
+  }
+
+  deckEl.addEventListener('pointerdown', (e) => {
+    if (busy || !top || sheetOpen || e.button > 0) return;
+    deckEl.setPointerCapture(e.pointerId);
+    const now = performance.now();
+    drag = {
+      id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: now,
+      dx: 0, dy: 0, w: deckEl.offsetWidth, moved: false, samples: [[now, e.clientX]],
+    };
+  });
+
+  deckEl.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.dx = e.clientX - drag.x0;
+    drag.dy = e.clientY - drag.y0;
+    if (!drag.moved && Math.hypot(drag.dx, drag.dy) > 7) drag.moved = true;
+    const now = performance.now();
+    drag.samples.push([now, e.clientX]);
+    while (drag.samples.length > 2 && now - drag.samples[0][0] > 100) drag.samples.shift();
+    if (drag.moved && !dragFrame) {
+      dragFrame = requestAnimationFrame(() => { dragFrame = 0; dragPose(); });
+    }
+  });
+
+  function endDrag(e, cancelled) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (dragFrame) { cancelAnimationFrame(dragFrame); dragFrame = 0; }
+    if (cancelled) { snapBack(); return; }
+
+    const now = performance.now();
+    const [ts, xs] = d.samples[0];
+    const vx = (e.clientX - xs) / Math.max(1, now - ts);   // px per ms
+    d.dx = e.clientX - d.x0;
+
+    if (!d.moved && now - d.t0 < 500) {
+      if (state.revealed) openSheet(); else nudge();
+      return;
+    }
+    const threshold = d.w * 0.32;
+    if (d.dx < -threshold || (vx < -0.45 && d.dx < -24)) pass(vx);
+    else if (!state.revealed && (d.dx > threshold * 0.7 || (vx > 0.45 && d.dx > 20))) reveal();
+    else snapBack();
+  }
+  deckEl.addEventListener('pointerup', (e) => endDrag(e, false));
+  deckEl.addEventListener('pointercancel', (e) => endDrag(e, true));
+  deckEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // No page scrolling, rubber-banding or pull-to-refresh, except inside the sheet's text.
+  document.addEventListener('touchmove', (e) => {
+    if (!(sheetOpen && e.target.closest('.sheet-body'))) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+
+  /* ---------- keyboard ---------- */
+
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (sheetOpen) {
+      if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }
+      return;
+    }
+    const onButton = e.target.closest && e.target.closest('button');
+    switch (e.key) {
+      case 'ArrowLeft': e.preventDefault(); pass(); break;
+      case 'ArrowRight': e.preventDefault(); reveal(); break;
+      case 'ArrowUp': e.preventDefault(); openSheet(); break;
+      case 'Enter':
+      case ' ':
+        if (onButton) return;
+        e.preventDefault();
+        if (state.revealed) openSheet(); else reveal();
+        break;
+      case 's': case 'S': reshuffle(); break;
+      default:
+    }
+  });
+
+  /* ---------- controls ---------- */
+
+  function renderSound() {
+    soundBtn.setAttribute('aria-pressed', String(SFX.enabled));
+    soundBtn.setAttribute('aria-label', SFX.enabled ? 'Sound on. Turn sound off' : 'Sound off. Turn sound on');
+  }
+  soundBtn.addEventListener('click', () => {
+    SFX.setEnabled(!SFX.enabled);
+    renderSound();
+    save();
+  });
+  shuffleBtn.addEventListener('click', reshuffle);
+  $('empty-shuffle').addEventListener('click', reshuffle);
+
+  function applyMotionPref() {
+    deckEl.classList.toggle('rm', reduced);
+    if (top && !busy) {
+      top.pose = restPose();
+      apply(top);
+    }
+  }
+  motionQuery.addEventListener('change', (e) => {
+    reduced = e.matches;
+    applyMotionPref();
+  });
+
+  /* ---------- start ---------- */
+
+  const saved = load();
+  if (saved) {
+    state.order = saved.order;
+    state.index = clamp(saved.index, 0, CARDS.length);
+    state.revealed = !!saved.revealed && state.index < CARDS.length;
+    if (saved.sound) SFX.setEnabled(true);
+  } else {
+    state.order = newOrder();
+  }
+  deckEl.classList.toggle('rm', reduced);
+  showTop();
+  renderSound();
+})();
