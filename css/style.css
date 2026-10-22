@@ -345,6 +345,11 @@ button { font: inherit; color: inherit; }
   100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); }
 }
 
+/* only the face turned toward the viewer is drawn (iOS ignores backface-visibility here);
+   reduced motion crossfades instead, so it is left alone */
+.deck:not(.rm) .card:not(.show-front) .front,
+.deck:not(.rm) .card.show-front .back { visibility: hidden; }
+
 /* reduced motion: crossfade instead of turning in 3D */
 .rm .card-inner { transform: none !important; }
 .rm .front { transform: none; }

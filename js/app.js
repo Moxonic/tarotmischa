@@ -166,6 +166,10 @@
     const p = c.pose;
     c.el.style.transform = `translate3d(${p.x.toFixed(2)}px,${p.y.toFixed(2)}px,0) rotate(${p.rot.toFixed(3)}deg) scale(${p.s.toFixed(4)})`;
     c.inner.style.transform = `rotateY(${p.ry.toFixed(2)}deg)`;
+    // iOS Safari doesn't reliably hide the far side of a 3D-turned face (backface-visibility),
+    // and paints the front over the back. Show only the face that is turned toward the viewer.
+    const turn = ((p.ry % 360) + 360) % 360;
+    c.el.classList.toggle('show-front', turn > 90 && turn < 270);
   }
 
   function showTop() {
