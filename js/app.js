@@ -634,6 +634,7 @@
       ? `${n} card${n === 1 ? '' : 's'} revealed from ${deck.name}`
       : '';
     $('history-empty').hidden = n > 0;
+    $('history-reset').hidden = n === 0;
     historyEl.style.setProperty('--ratio', deck.ratio);
     const frag = document.createDocumentFragment();
     state.history.forEach((h, k) => {
@@ -718,11 +719,35 @@
   function closeHistory() {
     if (!historyOpen) return;
     closeSheet();
+    disarmReset();
     historyOpen = false;
     historyEl.classList.remove('is-open');
     historyEl.setAttribute('aria-hidden', 'true');
     deckEl.focus({ preventScroll: true });
   }
+
+  // Start new: forget the revealed cards and reshuffle the whole deck. Asks for a second tap first.
+  const resetBtn = $('history-reset');
+  let resetArmed = 0;
+  function disarmReset() {
+    clearTimeout(resetArmed);
+    resetArmed = 0;
+    resetBtn.classList.remove('is-armed');
+    resetBtn.textContent = 'Start new';
+  }
+  resetBtn.addEventListener('click', () => {
+    if (!resetArmed) {
+      resetBtn.classList.add('is-armed');
+      resetBtn.textContent = 'Tap again to clear and reshuffle';
+      resetArmed = setTimeout(disarmReset, 3500);
+      return;
+    }
+    disarmReset();
+    state.history = [];
+    renderHistoryCount();
+    closeHistory();
+    reshuffle();
+  });
 
   $('history-btn').addEventListener('click', openHistory);
   $('history-close').addEventListener('click', closeHistory);
