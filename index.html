@@ -7,24 +7,35 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="A tarot deck you explore by swiping: all 78 cards, face down, waiting.">
+  <meta name="description" content="Seven historical tarot decks, shuffled face down. Swipe to explore them.">
   <title>Night Tarot</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='2' width='20' height='28' rx='3' fill='%23161c40' stroke='%23dcb65c' stroke-width='1.5'/%3E%3Cpolygon points='16,9 18,14 23,16 18,18 16,23 14,18 9,16 14,14' fill='%23dcb65c'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="js/netlify.js"></script>
 </head>
 <body>
   <div class="sky" aria-hidden="true"><div class="sky-twinkle"></div></div>
 
-  <main class="app">
+  <section class="picker" id="picker" aria-labelledby="picker-title">
+    <div class="picker-inner">
+      <p class="picker-brand" aria-hidden="true">✦ Night Tarot ✦</p>
+      <h1 class="picker-title" id="picker-title">Choose your deck</h1>
+      <p class="picker-sub">Seven historical tarots, from Renaissance Milan to Edwardian London. Each is shown in scans of the original cards.</p>
+      <ul class="picker-list" id="picker-list"></ul>
+      <p class="picker-foot">All card images are public-domain scans from Wikimedia Commons.</p>
+    </div>
+  </section>
+
+  <main class="app" id="app" aria-hidden="true">
     <header class="bar">
       <div class="counter" aria-live="polite">
-        <span class="counter-num" id="count">78</span><span class="counter-total">/ 78</span>
+        <span class="counter-num" id="count">78</span><span class="counter-total" id="count-total">/ 78</span>
         <span class="counter-label">in the deck</span>
       </div>
-      <div class="brand" aria-hidden="true">✦ Night Tarot ✦</div>
+      <button class="deck-name" id="deck-name" type="button" aria-label="Choose another deck"></button>
       <div class="actions">
         <button class="icon-btn" id="sound" type="button" aria-pressed="false" aria-label="Sound off. Turn sound on">
           <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>
@@ -64,6 +75,7 @@
     <div class="sheet-body" id="sheet-body">
       <p class="sheet-eyebrow" id="sheet-eyebrow"></p>
       <h2 class="sheet-title" id="sheet-title"></h2>
+      <p class="sheet-local" id="sheet-local"></p>
       <p class="sheet-orient" id="sheet-orient"></p>
       <ul class="chips" id="sheet-chips"></ul>
       <div class="meaning is-primary">
@@ -75,6 +87,7 @@
         <h3 id="m2-title">Reversed</h3>
         <p id="m2-text"></p>
       </div>
+      <p class="sheet-note" id="sheet-note"></p>
       <button class="pill-btn sheet-close" id="sheet-close" type="button">Return to the deck</button>
     </div>
   </section>
@@ -82,7 +95,8 @@
   <div class="sr-only" id="announce" aria-live="assertive"></div>
 
   <script src="js/data.js"></script>
-  <script src="js/art.js"></script>
+  <script src="js/decks.js"></script>
+  <script src="js/backs.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -1,11 +1,13 @@
 (function () {
   'use strict';
 
-  const { CARDS } = window.TAROT;
-  const ART = window.TAROT_ART;
+  const MEANING = window.TAROT.BY_KEY;
+  const DECKS = window.TAROT_DECKS;
+  const BACKS = window.TAROT_BACKS;
   const SFX = window.TAROT_SFX;
 
   const $ = (id) => document.getElementById(id);
+  const appEl = $('app');
   const deckEl = $('deck');
   const haloEl = $('halo');
   const sparksEl = $('sparks');
@@ -17,22 +19,30 @@
   const hintsEl = $('hints');
   const sheet = $('sheet');
   const scrim = $('scrim');
+  const picker = $('picker');
 
-  const STORE = 'night-tarot:v1';
+  const STORE = 'night-tarot:v2';
   const REVERSE_CHANCE = 0.3;
   const LAYER1 = { x: 0, y: 5, rot: -1.1, ry: 0, s: 0.982 };
+  const MISSING_NOTE = {
+    lost: 'This card has not survived. Four cards of the original deck are lost; its meaning is still read here.',
+    unscanned: 'The original survives in Bergamo, but no public-domain scan of it was available.',
+    copy: 'This card is missing from the surviving copy that was scanned; its meaning is still read here.',
+    missing: 'No image of this card was available.',
+  };
+  const MISSING_LABEL = { lost: 'Lost card', unscanned: 'Not pictured', copy: 'Missing from this copy', missing: 'Not pictured' };
 
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
   let reduced = motionQuery.matches;
 
+  let deck = null;          // the chosen deck from TAROT_DECKS
   const state = { order: [], index: 0, revealed: false };
-  let top = null;          // { el, inner, entry, pose }
+  let saved = load();
+  let top = null;           // { el, inner, entry, pose }
   let busy = false;
   let sheetOpen = false;
+  let pickerOpen = true;
   let haloLevel = 0;
-
-  document.documentElement.style.setProperty('--card-back',
-    `url("data:image/svg+xml,${encodeURIComponent(ART.back())}")`);
 
   /* ---------- helpers ---------- */
 
@@ -42,7 +52,6 @@
   const ease = {
     linear: (t) => t,
     outCubic: (t) => 1 - Math.pow(1 - t, 3),
-    outQuart: (t) => 1 - Math.pow(1 - t, 4),
     inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
     outBack: (t) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
   };
@@ -64,34 +73,42 @@
     try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* unsupported */ }
   }
 
-  function save() {
-    try {
-      localStorage.setItem(STORE, JSON.stringify({
-        order: state.order, index: state.index, revealed: state.revealed, sound: SFX.enabled,
-      }));
-    } catch (e) { /* storage unavailable */ }
-  }
-
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE));
-      if (s && Array.isArray(s.order) && s.order.length === CARDS.length &&
-          s.order.every((e) => e && CARDS[e.id]) && Number.isInteger(s.index)) return s;
+      if (s && typeof s === 'object') return { sound: !!s.sound, last: s.last || null, progress: s.progress || {} };
     } catch (e) { /* storage unavailable or corrupt */ }
-    return null;
+    return { sound: false, last: null, progress: {} };
+  }
+
+  function save() {
+    if (deck) {
+      saved.last = deck.id;
+      saved.progress[deck.id] = { order: state.order, index: state.index, revealed: state.revealed };
+    }
+    saved.sound = SFX.enabled;
+    try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
+  }
+
+  function validProgress(d, p) {
+    return p && Array.isArray(p.order) && p.order.length === d.cards.length &&
+      p.order.every((e) => e && Number.isInteger(e.i) && d.cards[e.i]) && Number.isInteger(p.index);
   }
 
   function newOrder() {
-    const ids = CARDS.map((c) => c.id);
+    const ids = deck.cards.map((_, i) => i);
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]];
     }
-    return ids.map((id) => ({ id, rev: Math.random() < REVERSE_CHANCE }));
+    return ids.map((i) => ({ i, rev: Math.random() < REVERSE_CHANCE }));
   }
 
+  const total = () => state.order.length;
   const remaining = () => state.order.length - state.index;
   const restPose = () => ({ x: 0, y: 0, rot: 0, ry: state.revealed && !reduced ? 180 : 0, s: 1 });
+  const cardOf = (entry) => deck.cards[entry.i];
+  const meaningOf = (card) => MEANING[card.k];
 
   function setHalo(v) {
     haloLevel = v;
@@ -104,15 +121,42 @@
     requestAnimationFrame(() => { el.textContent = text; });
   }
 
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /* ---------- images ---------- */
+
+  const imageCache = new Map();
+  function preload(src) {
+    if (!src) return Promise.resolve();
+    if (!imageCache.has(src)) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+      imageCache.set(src, img.decode ? img.decode().catch(() => {}) : new Promise((r) => { img.onload = img.onerror = r; }));
+    }
+    return imageCache.get(src);
+  }
+  function preloadAhead() {
+    for (let k = state.index; k < Math.min(state.order.length, state.index + 3); k++) preload(cardOf(state.order[k]).img);
+  }
+
   /* ---------- cards ---------- */
 
+  function faceHTML(card) {
+    if (card.img) return `<img class="art" src="${card.img}" alt="" draggable="false" decoding="async">`;
+    const m = meaningOf(card);
+    return `<div class="art missing"><span class="missing-label">${MISSING_LABEL[card.miss] || MISSING_LABEL.missing}</span>` +
+      `<span class="missing-name">${esc(card.n || m.name)}</span>` +
+      `<span class="missing-note">${card.miss === 'lost' ? 'Lost to time.' : 'Not in this copy.'} Its meaning remains.</span></div>`;
+  }
+
   function makeCard(entry, pose) {
-    const card = CARDS[entry.id];
+    const card = cardOf(entry);
     const el = document.createElement('div');
     el.className = 'card';
     el.innerHTML =
       `<div class="card-inner"><div class="face back"></div>` +
-      `<div class="face front${entry.rev ? ' is-rev' : ''}"><div class="art">${ART.face(card)}</div><div class="sheen"></div></div></div>`;
+      `<div class="face front${entry.rev ? ' is-rev' : ''}${card.img ? ' has-img' : ''}">${faceHTML(card)}<div class="sheen"></div></div></div>`;
     const c = { el, inner: el.firstChild, entry, pose: { ...pose } };
     apply(c);
     return c;
@@ -132,6 +176,7 @@
       if (state.revealed) top.el.classList.add('is-revealed');
       deckEl.insertBefore(top.el, sparksEl);
     }
+    preloadAhead();
     setHalo(state.revealed ? 0.3 : 0);
     renderDeck();
   }
@@ -139,14 +184,17 @@
   function renderDeck() {
     const left = remaining();
     countEl.textContent = left;
+    $('count-total').textContent = `/ ${total()}`;
     const below = Math.max(0, left - 1);
     layers.forEach((l, i) => { l.style.opacity = i < Math.min(3, below) ? '1' : '0'; });
     emptyEl.hidden = left > 0;
-    deckEl.setAttribute('aria-label', left === 0
-      ? 'The deck is empty. Reshuffle to begin again.'
-      : state.revealed
-        ? `${CARDS[top.entry.id].name}${top.entry.rev ? ', reversed' : ''}. Press Enter to read its meaning, or Left Arrow for the next card. ${left} of 78 remain.`
-        : `Face-down card, ${left} of 78 remain. Right Arrow reveals it, Left Arrow passes it.`);
+    let label;
+    if (left === 0) label = 'The deck is empty. Reshuffle to begin again.';
+    else if (state.revealed) {
+      const card = cardOf(top.entry);
+      label = `${meaningOf(card).name}${top.entry.rev ? ', reversed' : ''}. Press Enter to read its meaning, or Left Arrow for the next card. ${left} of ${total()} remain.`;
+    } else label = `Face-down card, ${left} of ${total()} remain. Right Arrow reveals it, Left Arrow passes it.`;
+    deckEl.setAttribute('aria-label', label);
     renderHints();
   }
 
@@ -161,7 +209,7 @@
       l.textContent = 'next'; r.textContent = 'reveal'; m.textContent = 'tap the card to read it';
       hl.classList.remove('is-off'); hr.classList.add('is-off');
     } else {
-      l.textContent = 'pass'; r.textContent = 'reveal'; m.textContent = left === 78 ? 'swipe to begin' : '';
+      l.textContent = 'pass'; r.textContent = 'reveal'; m.textContent = left === total() ? 'swipe to begin' : '';
       hl.classList.remove('is-off'); hr.classList.remove('is-off');
     }
   }
@@ -198,10 +246,12 @@
   async function reveal() {
     if (busy || !top || state.revealed) return;
     busy = true;
+    const c = top;
+    const card = cardOf(c.entry);
+    // never turn a card over onto a blank face: give the scan a moment to arrive
+    await Promise.race([preload(card.img), wait(1500)]);
     state.revealed = true;
     save();
-    const c = top;
-    const card = CARDS[c.entry.id];
     SFX.flip();
 
     if (reduced) {
@@ -237,7 +287,7 @@
       });
       c.el.classList.add('is-revealed');
     }
-    announce(`${card.name}${c.entry.rev ? ', reversed' : ''}`);
+    announce(`${meaningOf(card).name}${c.entry.rev ? ', reversed' : ''}`);
     renderDeck();
     busy = false;
   }
@@ -256,6 +306,7 @@
     const entry = state.order[state.index];
     top = entry ? makeCard(entry, reduced ? restPose() : LAYER1) : null;
     if (top) deckEl.insertBefore(top.el, old.el);
+    preloadAhead();
     renderDeck();
     SFX.pass();
 
@@ -327,7 +378,7 @@
   /* ---------- reshuffle ---------- */
 
   async function reshuffle() {
-    if (busy) return;
+    if (busy || !deck) return;
     busy = true;
     closeSheet();
     shuffleBtn.classList.remove('is-spinning');
@@ -340,7 +391,7 @@
       state.revealed = false;
       save();
       showTop();
-      announce('The deck is shuffled. 78 cards remain.');
+      announce(`The ${deck.name} deck is shuffled. ${total()} cards remain.`);
     };
 
     if (reduced || typeof deckEl.animate !== 'function') {
@@ -413,28 +464,122 @@
     busy = false;
   }
 
+  /* ---------- choosing a deck ---------- */
+
+  const backCache = new Map();
+  function backURL(d) {
+    if (!backCache.has(d.id)) {
+      backCache.set(d.id, `url("data:image/svg+xml,${encodeURIComponent(BACKS.back(d.id, d.ratio))}")`);
+    }
+    return backCache.get(d.id);
+  }
+
+  function renderPicker() {
+    const list = $('picker-list');
+    list.innerHTML = '';
+    DECKS.forEach((d, i) => {
+      const p = saved.progress[d.id];
+      const inProgress = validProgress(d, p) && p.index > 0 && p.index < d.cards.length;
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<button class="deck-option${saved.last === d.id ? ' is-current' : ''}" type="button" data-id="${d.id}" style="animation-delay:${i * 50}ms">` +
+        `<span class="deck-thumb" style="--ratio:${d.ratio};--back:${esc(backURL(d))}"><span class="thumb-back"></span><img src="${d.sample}" alt="" loading="lazy" decoding="async"></span>` +
+        `<span class="deck-text"><span class="deck-era">${esc(d.era)}</span><span class="deck-title">${esc(d.name)}</span>` +
+        `<span class="deck-blurb">${esc(d.blurb)}</span>` +
+        `<span class="deck-meta"><span>${d.cards.length} cards</span>` +
+        (inProgress ? `<span class="is-progress">${d.cards.length - p.index} left in your deck</span>` : '') +
+        `</span></span></button>`;
+      list.appendChild(li);
+    });
+  }
+
+  $('picker-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.deck-option');
+    if (btn) chooseDeck(btn.dataset.id);
+  });
+
+  function openPicker() {
+    if (busy) return;
+    closeSheet();
+    renderPicker();
+    pickerOpen = true;
+    picker.classList.remove('is-hidden');
+    picker.setAttribute('aria-hidden', 'false');
+    appEl.setAttribute('aria-hidden', 'true');
+    picker.scrollTop = 0;
+    const current = picker.querySelector('.is-current') || picker.querySelector('.deck-option');
+    if (current) current.focus({ preventScroll: true });
+  }
+
+  function chooseDeck(id) {
+    const d = DECKS.find((x) => x.id === id);
+    if (!d) return;
+    const fresh = !deck || deck.id !== d.id;
+    deck = d;
+    deckEl.style.setProperty('--ratio', d.ratio);
+    document.documentElement.style.setProperty('--card-back', backURL(d));
+    $('deck-name').textContent = d.short || d.name;
+
+    const p = saved.progress[d.id];
+    const resume = validProgress(d, p) && p.index < d.cards.length;
+    if (fresh) {
+      if (resume) {
+        state.order = p.order;
+        state.index = clamp(p.index, 0, d.cards.length);
+        state.revealed = !!p.revealed;
+      } else {
+        state.order = newOrder();
+        state.index = 0;
+        state.revealed = false;
+      }
+      save();
+      showTop();
+    }
+
+    pickerOpen = false;
+    picker.classList.add('is-hidden');
+    picker.setAttribute('aria-hidden', 'true');
+    appEl.setAttribute('aria-hidden', 'false');
+    deckEl.classList.remove('is-entering');
+    void deckEl.offsetWidth;
+    deckEl.classList.add('is-entering');
+    deckEl.focus({ preventScroll: true });
+    announce(`${d.name}. ${remaining()} of ${total()} cards in the deck.`);
+    // a brand new deck arrives with a shuffle
+    if (fresh && !resume) setTimeout(reshuffle, reduced ? 0 : 500);
+  }
+
+  $('deck-name').addEventListener('click', openPicker);
+
   /* ---------- meaning sheet ---------- */
 
   function openSheet() {
-    if (!top || !state.revealed || sheetOpen) return;
-    const card = CARDS[top.entry.id];
+    if (!top || !state.revealed || sheetOpen || pickerOpen) return;
+    const card = cardOf(top.entry);
+    const m = meaningOf(card);
     const rev = top.entry.rev;
-    $('sheet-eyebrow').textContent = card.arcana === 'major' ? `Major Arcana · ${card.label}` : card.group;
-    $('sheet-title').textContent = card.name;
+    const isMajor = card.k.startsWith('M') || card.k.startsWith('X:');
+    const place = isMajor
+      ? (card.l ? `${deck.id === 'minchiate' ? 'Trump' : 'Major Arcana'} · ${card.l}` : 'Major Arcana')
+      : m.group;
+    $('sheet-eyebrow').textContent = `${deck.name} · ${place}`;
+    $('sheet-title').textContent = m.name;
+    $('sheet-local').textContent = card.n && card.n !== m.name ? `On the card: ${card.n}` : '';
     $('sheet-orient').innerHTML = rev
       ? 'Drawn <b>reversed</b>; its energy is blocked, inward or delayed.'
       : 'Drawn <b>upright</b>.';
     const chips = $('sheet-chips');
     chips.innerHTML = '';
-    (rev ? card.rkw : card.kw).forEach((k) => {
+    (rev ? m.rkw : m.kw).forEach((k) => {
       const li = document.createElement('li');
       li.textContent = k;
       chips.appendChild(li);
     });
     $('m1-title').textContent = rev ? 'Reversed meaning' : 'Upright meaning';
-    $('m1-text').textContent = rev ? card.rev : card.up;
+    $('m1-text').textContent = rev ? m.rev : m.up;
     $('m2-title').textContent = rev ? 'When upright' : 'When reversed';
-    $('m2-text').textContent = rev ? card.up : card.rev;
+    $('m2-text').textContent = rev ? m.up : m.rev;
+    $('sheet-note').textContent = card.miss ? MISSING_NOTE[card.miss] || MISSING_NOTE.missing : '';
     $('sheet-body').scrollTop = 0;
 
     sheetOpen = true;
@@ -522,7 +667,7 @@
   }
 
   deckEl.addEventListener('pointerdown', (e) => {
-    if (busy || !top || sheetOpen || e.button > 0) return;
+    if (busy || !top || sheetOpen || pickerOpen || e.button > 0) return;
     deckEl.setPointerCapture(e.pointerId);
     const now = performance.now();
     drag = {
@@ -569,9 +714,10 @@
   deckEl.addEventListener('pointercancel', (e) => endDrag(e, true));
   deckEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  // No page scrolling, rubber-banding or pull-to-refresh, except inside the sheet's text.
+  // No page scrolling, rubber-banding or pull-to-refresh, except inside the sheet's text and the deck list.
   document.addEventListener('touchmove', (e) => {
-    if (!(sheetOpen && e.target.closest('.sheet-body'))) e.preventDefault();
+    const scrollable = (sheetOpen && e.target.closest('.sheet-body')) || (pickerOpen && e.target.closest('.picker'));
+    if (!scrollable) e.preventDefault();
   }, { passive: false });
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -580,6 +726,10 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (pickerOpen) {
+      if (e.key === 'Escape' && deck) { e.preventDefault(); chooseDeck(deck.id); }
+      return;
+    }
     if (sheetOpen) {
       if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }
       return;
@@ -596,6 +746,7 @@
         if (state.revealed) openSheet(); else reveal();
         break;
       case 's': case 'S': reshuffle(); break;
+      case 'd': case 'D': openPicker(); break;
       default:
     }
   });
@@ -614,30 +765,20 @@
   shuffleBtn.addEventListener('click', reshuffle);
   $('empty-shuffle').addEventListener('click', reshuffle);
 
-  function applyMotionPref() {
+  motionQuery.addEventListener('change', (e) => {
+    reduced = e.matches;
     deckEl.classList.toggle('rm', reduced);
     if (top && !busy) {
       top.pose = restPose();
       apply(top);
     }
-  }
-  motionQuery.addEventListener('change', (e) => {
-    reduced = e.matches;
-    applyMotionPref();
   });
 
-  /* ---------- start ---------- */
+  /* ---------- start: always ask which deck ---------- */
 
-  const saved = load();
-  if (saved) {
-    state.order = saved.order;
-    state.index = clamp(saved.index, 0, CARDS.length);
-    state.revealed = !!saved.revealed && state.index < CARDS.length;
-    if (saved.sound) SFX.setEnabled(true);
-  } else {
-    state.order = newOrder();
-  }
+  if (saved.sound) SFX.setEnabled(true);
   deckEl.classList.toggle('rm', reduced);
-  showTop();
   renderSound();
+  renderPicker();
+  picker.setAttribute('aria-hidden', 'false');
 })();

@@ -282,17 +282,107 @@
     ] },
   };
 
+  // Trumps that only appear in some historical decks (Minchiate, Etteilla).
+  const EXTRAS = {
+    'X:grandduke': ['The Grand Duke',
+      'Worldly patronage and civic power. A protector with influence opens a door.',
+      'Favour withdrawn, or power used for show. Do not lean on borrowed authority.',
+      ['patronage', 'influence', 'civic duty'], ['vanity', 'favouritism', 'lost support']],
+    'X:eastemperor': ['The Eastern Emperor',
+      'Authority from afar and the weight of old tradition. Respect the long view.',
+      'Distant rule, or tradition grown hollow. Bring decisions closer to home.',
+      ['tradition', 'distant authority', 'dignity'], ['remoteness', 'rigidity', 'empty ritual']],
+    'X:hope': ['Hope',
+      'Faith in what is not yet seen. Keep your eyes on the light ahead.',
+      'Wishful thinking, or hope worn thin. Anchor your dreams in action.',
+      ['hope', 'aspiration', 'trust in the future'], ['despondency', 'wishful thinking']],
+    'X:prudence': ['Prudence',
+      'Foresight and careful judgement. Look twice, then act wisely.',
+      'Overcaution or a lapse in judgement. Weigh risks without freezing.',
+      ['foresight', 'wisdom', 'caution'], ['hesitation', 'carelessness', 'second-guessing']],
+    'X:faith': ['Faith',
+      'Devotion and trust in something greater. Keep the promise you made.',
+      'Doubt, or belief held without question. Test what you trust.',
+      ['devotion', 'trust', 'loyalty'], ['doubt', 'dogma', 'broken trust']],
+    'X:charity': ['Charity',
+      'Generous love that asks nothing back. Give freely and nurture others.',
+      'Giving to be seen, or giving until empty. Keep a little for yourself.',
+      ['generosity', 'love', 'nurture'], ['self-sacrifice', 'conditional giving']],
+    'X:fire': ['Fire',
+      'Will, passion and transformation. Let the flame purify and drive you.',
+      'Anger, burnout or a passion that consumes. Bank the fire.',
+      ['passion', 'will', 'transformation'], ['anger', 'burnout', 'destruction']],
+    'X:water': ['Water',
+      'Feeling, intuition and flow. Let emotion carry you where it must.',
+      'Overwhelm, or feelings dammed up. Find the current again.',
+      ['emotion', 'intuition', 'flow'], ['overwhelm', 'stagnation', 'moodiness']],
+    'X:earth': ['Earth',
+      'Body, home and patient growth. Plant yourself and tend what is real.',
+      'Inertia or greed. Loosen roots that have become chains.',
+      ['stability', 'abundance', 'groundedness'], ['inertia', 'materialism', 'stubbornness']],
+    'X:air': ['Air',
+      'Thought, speech and freedom. Clear the mind and let new ideas move.',
+      'Scattered thinking, or words without weight. Come back to earth.',
+      ['intellect', 'communication', 'freedom'], ['distraction', 'detachment', 'idle talk']],
+    'X:libra': ['Libra', 'Balance, partnership and fair dealing. Seek harmony between opposites.',
+      'Indecision, or peace kept at any price. Choose a side.', ['balance', 'partnership', 'fairness'], ['indecision', 'people-pleasing']],
+    'X:virgo': ['Virgo', 'Care, craft and purity of purpose. Attend to the details that matter.',
+      'Perfectionism or worry. Good enough is sometimes enough.', ['service', 'precision', 'health'], ['perfectionism', 'anxiety']],
+    'X:scorpio': ['Scorpio', 'Depth, desire and transformation. Look beneath the surface.',
+      'Jealousy, secrecy or resentment. Let the sting go.', ['intensity', 'transformation', 'insight'], ['jealousy', 'secrecy', 'control']],
+    'X:aries': ['Aries', 'Courage and new beginnings. Be first, act boldly.',
+      'Impatience and rash conflict. Count to ten.', ['initiative', 'courage', 'drive'], ['impatience', 'aggression']],
+    'X:capricorn': ['Capricorn', 'Discipline and long ambition. Climb steadily toward the summit.',
+      'Coldness, or ambition without joy. Rest on the ascent.', ['ambition', 'discipline', 'endurance'], ['rigidity', 'coldness']],
+    'X:sagittarius': ['Sagittarius', 'Adventure, faith and far horizons. Aim your arrow high.',
+      'Restlessness or broken promises. Finish what you started.', ['adventure', 'optimism', 'learning'], ['restlessness', 'excess']],
+    'X:cancer': ['Cancer', 'Home, memory and protection. Shelter what is tender.',
+      'Clinging, or retreating into the shell. Come out a little.', ['home', 'nurture', 'protection'], ['clinging', 'moodiness']],
+    'X:pisces': ['Pisces', 'Dreams, compassion and the mystical. Swim in deep waters.',
+      'Escapism or confusion. Keep one fin on the shore.', ['compassion', 'imagination', 'spirit'], ['escapism', 'confusion']],
+    'X:aquarius': ['Aquarius', 'Vision, friendship and the new. Pour your ideas out for all.',
+      'Aloofness or rebellion for its own sake. Stay connected.', ['innovation', 'community', 'vision'], ['detachment', 'contrariness']],
+    'X:leo': ['Leo', 'Pride, warmth and creative fire. Step into the light.',
+      'Vanity or a need for applause. Shine without demanding to be seen.', ['confidence', 'creativity', 'generosity'], ['vanity', 'arrogance']],
+    'X:taurus': ['Taurus', 'Patience, pleasure and steady wealth. Savour what you have built.',
+      'Stubbornness or indulgence. Move when it is time.', ['patience', 'sensuality', 'security'], ['stubbornness', 'possessiveness']],
+    'X:gemini': ['Gemini', 'Curiosity, conversation and duality. Hold two ideas at once.',
+      'Inconsistency or gossip. Pick one voice and keep it.', ['curiosity', 'communication', 'versatility'], ['inconsistency', 'restlessness']],
+    'X:querent': ['Etteilla · The Querent',
+      'This card stands for the one who asks: a man, or the questioner\'s own will. The reading turns on your choices.',
+      'Chaos before order. The question is not yet clear. Steady yourself before asking again.',
+      ['the seeker', 'self', 'beginning of order'], ['chaos', 'confusion', 'unformed question']],
+    'X:querente': ['Etteilla · The Questioner',
+      'This card stands for the one who asks: a woman, or the questioner\'s receptive side. Listen to what is felt.',
+      'Rest and inner repose, or a question asked too soon. Be still a while.',
+      ['the seeker', 'receptivity', 'repose'], ['restlessness', 'self-doubt']],
+    'X:nightday': ['The Night · The Day',
+      'Day: clarity arrives and hidden things are seen plainly. The plan becomes visible.',
+      'Night: things are veiled. Wait for morning before you decide.',
+      ['revelation', 'clarity', 'new day'], ['obscurity', 'waiting', 'the hidden']],
+    'X:support': ['Support · Protection',
+      'A helping hand, a patron or a sheltering power stands with you.',
+      'Help withdrawn, or protection that smothers. Learn to stand on your own.',
+      ['support', 'protection', 'assistance'], ['withdrawn help', 'over-protection']],
+  };
+
   const CARDS = [];
   MAJORS.forEach(([name, up, rev, kw, rkw], i) => {
-    CARDS.push({ id: CARDS.length, name, arcana: 'major', number: i, label: ROMAN[i],
+    CARDS.push({ id: CARDS.length, key: `M${i}`, name, arcana: 'major', number: i, label: ROMAN[i],
       group: 'Major Arcana', up, rev, kw, rkw });
   });
   Object.entries(SUITS).forEach(([suit, s]) => {
     s.cards.forEach(([up, rev, kw, rkw], r) => {
-      CARDS.push({ id: CARDS.length, name: `${RANKS[r]} of ${s.name}`, arcana: 'minor', suit, rank: r + 1,
+      CARDS.push({ id: CARDS.length, key: `${suit}${r + 1}`, name: `${RANKS[r]} of ${s.name}`, arcana: 'minor', suit, rank: r + 1,
         label: RANK_LABEL[r], group: `Suit of ${s.name} · ${s.element}`, up, rev, kw, rkw });
     });
   });
 
-  g.TAROT = { CARDS };
+  const BY_KEY = {};
+  CARDS.forEach((c) => { BY_KEY[c.key] = c; });
+  Object.entries(EXTRAS).forEach(([key, [name, up, rev, kw, rkw]]) => {
+    BY_KEY[key] = { key, name, arcana: 'major', label: '', group: 'Trump', up, rev, kw, rkw };
+  });
+
+  g.TAROT = { CARDS, BY_KEY, ROMAN, SUITS };
 })(typeof window !== 'undefined' ? window : globalThis);
