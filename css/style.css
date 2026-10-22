@@ -178,9 +178,6 @@ button { font: inherit; color: inherit; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-#sound .i-on { display: none; }
-#sound[aria-pressed='true'] .i-on { display: block; }
-#sound[aria-pressed='true'] .i-off { display: none; }
 #shuffle.is-spinning svg { animation: spin 0.9s var(--ease-out); }
 @keyframes spin { to { transform: rotate(360deg); } }
 

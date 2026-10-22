@@ -4,7 +4,6 @@
   const MEANING = window.TAROT.BY_KEY;
   const DECKS = window.TAROT_DECKS;
   const BACKS = window.TAROT_BACKS;
-  const SFX = window.TAROT_SFX;
 
   const $ = (id) => document.getElementById(id);
   const appEl = $('app');
@@ -14,7 +13,6 @@
   const emptyEl = $('empty');
   const layers = Array.from(deckEl.querySelectorAll('.layer'));
   const countEl = $('count');
-  const soundBtn = $('sound');
   const shuffleBtn = $('shuffle');
   const hintsEl = $('hints');
   const sheet = $('sheet');
@@ -76,9 +74,9 @@
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE));
-      if (s && typeof s === 'object') return { sound: !!s.sound, last: s.last || null, progress: s.progress || {} };
+      if (s && typeof s === 'object') return { last: s.last || null, progress: s.progress || {} };
     } catch (e) { /* storage unavailable or corrupt */ }
-    return { sound: false, last: null, progress: {} };
+    return { last: null, progress: {} };
   }
 
   function save() {
@@ -86,7 +84,6 @@
       saved.last = deck.id;
       saved.progress[deck.id] = { order: state.order, index: state.index, revealed: state.revealed };
     }
-    saved.sound = SFX.enabled;
     try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
   }
 
@@ -252,7 +249,6 @@
     await Promise.race([preload(card.img), wait(1500)]);
     state.revealed = true;
     save();
-    SFX.flip();
 
     if (reduced) {
       c.el.classList.add('is-revealed');
@@ -308,7 +304,6 @@
     if (top) deckEl.insertBefore(top.el, old.el);
     preloadAhead();
     renderDeck();
-    SFX.pass();
 
     if (reduced) {
       if (top) top.el.style.opacity = '0';
@@ -395,7 +390,6 @@
     };
 
     if (reduced || typeof deckEl.animate !== 'function') {
-      SFX.riffle(14, 40);
       await tween(220, ease.linear, (e) => { deckEl.style.opacity = String(1 - e); });
       finish();
       await tween(320, ease.linear, (e) => { deckEl.style.opacity = String(e); });
@@ -425,14 +419,14 @@
       const a = ghosts[i].animate([{ transform: cur[i] }, { transform: to }],
         { fill: 'forwards', easing: 'cubic-bezier(.4,0,.2,1)', ...opts });
       cur[i] = to;
-      return a.finished;
+      // never let a stalled animation leave the deck locked
+      return Promise.race([a.finished, wait((opts.duration || 0) + (opts.delay || 0) + 150)]);
     };
 
     await wait(120);
     let stackOrder = ghosts.map((_, i) => i);
     for (let round = 0; round < 2; round++) {
       // split the deck into two halves
-      SFX.split();
       const half = N / 2;
       await Promise.all(stackOrder.map((gi, pos) => {
         const side = pos < half ? -1 : 1;
@@ -447,7 +441,6 @@
         if (Math.random() < 0.5) merged.push(left[k], right[k]); else merged.push(right[k], left[k]);
       }
       const gap = round ? 42 : 55;
-      SFX.riffle(N, gap);
       await Promise.all(merged.map((gi, k) => {
         setTimeout(() => { ghosts[gi].style.zIndex = String(10 + round * N + k); }, k * gap);
         return move(gi, `translate3d(0, ${-k * 0.7}px, 0) rotate(${((Math.random() - 0.5) * 3).toFixed(2)}deg)`,
@@ -753,15 +746,6 @@
 
   /* ---------- controls ---------- */
 
-  function renderSound() {
-    soundBtn.setAttribute('aria-pressed', String(SFX.enabled));
-    soundBtn.setAttribute('aria-label', SFX.enabled ? 'Sound on. Turn sound off' : 'Sound off. Turn sound on');
-  }
-  soundBtn.addEventListener('click', () => {
-    SFX.setEnabled(!SFX.enabled);
-    renderSound();
-    save();
-  });
   shuffleBtn.addEventListener('click', reshuffle);
   $('empty-shuffle').addEventListener('click', reshuffle);
 
@@ -776,9 +760,7 @@
 
   /* ---------- start: always ask which deck ---------- */
 
-  if (saved.sound) SFX.setEnabled(true);
   deckEl.classList.toggle('rm', reduced);
-  renderSound();
   renderPicker();
   picker.setAttribute('aria-hidden', 'false');
 })();

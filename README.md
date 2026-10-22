@@ -27,6 +27,5 @@ Plain HTML, CSS and JavaScript, with no build step and no backend.
 
 - `js/data.js`: meanings, including the extra Minchiate and Etteilla trumps.
 - `js/backs.js`: a card back for each deck.
-- `js/sound.js`: optional synthesized sound.
 - `js/netlify.js`: closes or hides any badge or drawer that Netlify injects into the page.
 - `js/app.js`: the deck, gestures and animations.
