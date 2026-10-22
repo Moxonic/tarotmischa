@@ -789,9 +789,27 @@ button { font: inherit; color: inherit; }
 .history-empty { margin: auto; padding: 0 24px 40px; text-align: center; color: var(--ivory-dim); font-size: 17px; }
 .history-empty[hidden] { display: none; }
 .history-hint { margin: 0; padding: 6px 16px 14px; text-align: center; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ivory-dim); opacity: 0.7; }
-@media (orientation: portrait) {
-  .history-hint::after { content: " · turn your phone sideways for larger cards"; }
+/* upright phone: a grid of whole rows, sized in JS so the cards are as large as possible */
+.history.is-grid .history-track {
+  flex: none;
+  margin: auto 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), var(--col-w, 1fr));
+  justify-content: center;
+  grid-auto-rows: var(--row-h, auto);
+  column-gap: var(--gap);
+  row-gap: var(--gap);
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-padding-block: 8px;
+  touch-action: pan-y;
 }
+.history.is-grid .history-item { height: var(--row-h, auto); align-items: flex-start; }
+.history.is-grid .history-face { width: 100%; }
+.history.is-grid .history-cap { font-size: 13px; }
+.history.is-grid #history-prev svg, .history.is-grid #history-next svg { transform: rotate(90deg); }
 @media (max-height: 500px) and (orientation: landscape) {
   .history-bar { padding-top: 8px; padding-bottom: 4px; }
   .history-title { font-size: 20px; }
