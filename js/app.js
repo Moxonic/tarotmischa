@@ -34,12 +34,15 @@
   let reduced = motionQuery.matches;
 
   let deck = null;          // the chosen deck from TAROT_DECKS
-  const state = { order: [], index: 0, revealed: false };
+  const state = { order: [], index: 0, revealed: false, history: [] };
+  const HISTORY_MAX = 500;
   let saved = load();
   let top = null;           // { el, inner, entry, pose }
   let busy = false;
   let sheetOpen = false;
+  let sheetOpenedAt = 0;
   let pickerOpen = true;
+  let historyOpen = false;
   let haloLevel = 0;
 
   /* ---------- helpers ---------- */
@@ -82,7 +85,7 @@
   function save() {
     if (deck) {
       saved.last = deck.id;
-      saved.progress[deck.id] = { order: state.order, index: state.index, revealed: state.revealed };
+      saved.progress[deck.id] = { order: state.order, index: state.index, revealed: state.revealed, history: state.history };
     }
     try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
   }
@@ -248,6 +251,9 @@
     // never turn a card over onto a blank face: give the scan a moment to arrive
     await Promise.race([preload(card.img), wait(1500)]);
     state.revealed = true;
+    state.history.push({ i: c.entry.i, rev: c.entry.rev });
+    if (state.history.length > HISTORY_MAX) state.history.splice(0, state.history.length - HISTORY_MAX);
+    renderHistoryCount();
     save();
 
     if (reduced) {
@@ -494,6 +500,7 @@
   function openPicker() {
     if (busy) return;
     closeSheet();
+    closeHistory();
     renderPicker();
     pickerOpen = true;
     picker.classList.remove('is-hidden');
@@ -525,6 +532,9 @@
         state.index = 0;
         state.revealed = false;
       }
+      state.history = (p && Array.isArray(p.history) ? p.history : [])
+        .filter((e) => e && Number.isInteger(e.i) && d.cards[e.i]);
+      renderHistoryCount();
       save();
       showTop();
     }
@@ -546,11 +556,15 @@
 
   /* ---------- meaning sheet ---------- */
 
-  function openSheet() {
-    if (!top || !state.revealed || sheetOpen || pickerOpen) return;
-    const card = cardOf(top.entry);
+  // the face-up card on the deck
+  function openTopSheet() {
+    if (!top || !state.revealed || historyOpen) return;
+    openSheet(cardOf(top.entry), top.entry.rev);
+  }
+
+  function openSheet(card, rev) {
+    if (sheetOpen || pickerOpen) return;
     const m = meaningOf(card);
-    const rev = top.entry.rev;
     const isMajor = card.k.startsWith('M') || card.k.startsWith('X:');
     const place = isMajor
       ? (card.l ? `${deck.id === 'minchiate' ? 'Trump' : 'Major Arcana'} · ${card.l}` : 'Major Arcana')
@@ -576,6 +590,7 @@
     $('sheet-body').scrollTop = 0;
 
     sheetOpen = true;
+    sheetOpenedAt = performance.now();
     sheet.style.transform = '';
     sheet.classList.add('is-open');
     scrim.classList.add('is-open');
@@ -590,11 +605,96 @@
     sheet.classList.remove('is-open', 'is-dragging');
     scrim.classList.remove('is-open');
     sheet.setAttribute('aria-hidden', 'true');
+    (historyOpen ? $('history-close') : deckEl).focus({ preventScroll: true });
+  }
+
+  // A touch tap opens the sheet on finger-up; the browser's follow-up click then lands on the
+  // freshly shown scrim. Ignore clicks that arrive right after opening.
+  scrim.addEventListener('click', () => {
+    if (performance.now() - sheetOpenedAt > 450) closeSheet();
+  });
+  $('sheet-close').addEventListener('click', closeSheet);
+
+  /* ---------- history of revealed cards: five at a time, newest on the right ---------- */
+
+  const historyEl = $('history');
+  const trackEl = $('history-track');
+
+  function renderHistoryCount() {
+    const n = state.history.length;
+    $('history-count').textContent = n > 99 ? '99+' : String(n);
+    $('history-count').hidden = n === 0;
+    $('history-btn').setAttribute('aria-label', `Revealed cards (${n})`);
+  }
+
+  function renderHistory() {
+    trackEl.innerHTML = '';
+    const n = state.history.length;
+    $('history-sub').textContent = n
+      ? `${n} card${n === 1 ? '' : 's'} revealed from ${deck.name}`
+      : '';
+    $('history-empty').hidden = n > 0;
+    historyEl.style.setProperty('--ratio', deck.ratio);
+    const frag = document.createDocumentFragment();
+    state.history.forEach((h, k) => {
+      const card = deck.cards[h.i];
+      const m = meaningOf(card);
+      const li = document.createElement('li');
+      li.className = 'history-item';
+      li.innerHTML =
+        `<button type="button" class="history-card" data-k="${k}" aria-label="${k + 1}. ${esc(m.name)}${h.rev ? ', reversed' : ''}">` +
+        `<span class="history-face${h.rev ? ' is-rev' : ''}">${card.img
+          ? `<img src="${card.img}" alt="" loading="lazy" decoding="async" draggable="false">`
+          : `<span class="history-missing">${esc(card.n || m.name)}</span>`}</span>` +
+        `<span class="history-cap"><span class="history-num">${k + 1}</span>${esc(m.name)}${h.rev ? '<em>reversed</em>' : ''}</span></button>`;
+      frag.appendChild(li);
+    });
+    trackEl.appendChild(frag);
+    updateHistoryNav();
+  }
+
+  function pageWidth() { return trackEl.clientWidth; }
+  function updateHistoryNav() {
+    const max = trackEl.scrollWidth - trackEl.clientWidth;
+    $('history-prev').disabled = trackEl.scrollLeft <= 2;
+    $('history-next').disabled = trackEl.scrollLeft >= max - 2;
+  }
+
+  function openHistory() {
+    if (!deck || busy || pickerOpen) return;
+    closeSheet();
+    renderHistory();
+    historyOpen = true;
+    historyEl.classList.add('is-open');
+    historyEl.setAttribute('aria-hidden', 'false');
+    // start at the most recent cards; scroll left to go back
+    requestAnimationFrame(() => {
+      trackEl.scrollLeft = trackEl.scrollWidth;
+      updateHistoryNav();
+    });
+    $('history-close').focus({ preventScroll: true });
+  }
+
+  function closeHistory() {
+    if (!historyOpen) return;
+    closeSheet();
+    historyOpen = false;
+    historyEl.classList.remove('is-open');
+    historyEl.setAttribute('aria-hidden', 'true');
     deckEl.focus({ preventScroll: true });
   }
 
-  scrim.addEventListener('click', closeSheet);
-  $('sheet-close').addEventListener('click', closeSheet);
+  $('history-btn').addEventListener('click', openHistory);
+  $('history-close').addEventListener('click', closeHistory);
+  $('history-prev').addEventListener('click', () => trackEl.scrollBy({ left: -pageWidth(), behavior: reduced ? 'auto' : 'smooth' }));
+  $('history-next').addEventListener('click', () => trackEl.scrollBy({ left: pageWidth(), behavior: reduced ? 'auto' : 'smooth' }));
+  trackEl.addEventListener('scroll', updateHistoryNav, { passive: true });
+  trackEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.history-card');
+    if (!b) return;
+    const h = state.history[+b.dataset.k];
+    if (h) openSheet(deck.cards[h.i], h.rev);
+  });
 
   // drag the sheet's handle down to dismiss
   (function () {
@@ -660,7 +760,7 @@
   }
 
   deckEl.addEventListener('pointerdown', (e) => {
-    if (busy || !top || sheetOpen || pickerOpen || e.button > 0) return;
+    if (busy || !top || sheetOpen || pickerOpen || historyOpen || e.button > 0) return;
     deckEl.setPointerCapture(e.pointerId);
     const now = performance.now();
     drag = {
@@ -695,7 +795,7 @@
     d.dx = e.clientX - d.x0;
 
     if (!d.moved && now - d.t0 < 500) {
-      if (state.revealed) openSheet(); else nudge();
+      if (state.revealed) { tapped = true; openTopSheet(); } else nudge();
       return;
     }
     const threshold = d.w * 0.32;
@@ -703,13 +803,19 @@
     else if (!state.revealed && (d.dx > threshold * 0.7 || (vx > 0.45 && d.dx > 20))) reveal();
     else snapBack();
   }
+  // After a tap opens the sheet, cancel the touch's synthetic click so it can't hit the new sheet or scrim.
+  let tapped = false;
+  deckEl.addEventListener('touchend', (e) => {
+    if (tapped) { tapped = false; e.preventDefault(); }
+  }, { passive: false });
   deckEl.addEventListener('pointerup', (e) => endDrag(e, false));
   deckEl.addEventListener('pointercancel', (e) => endDrag(e, true));
   deckEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // No page scrolling, rubber-banding or pull-to-refresh, except inside the sheet's text and the deck list.
   document.addEventListener('touchmove', (e) => {
-    const scrollable = (sheetOpen && e.target.closest('.sheet-body')) || (pickerOpen && e.target.closest('.picker'));
+    const scrollable = (sheetOpen && e.target.closest('.sheet-body')) || (pickerOpen && e.target.closest('.picker')) ||
+      (historyOpen && !sheetOpen && e.target.closest('.history-track'));
     if (!scrollable) e.preventDefault();
   }, { passive: false });
   document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -727,19 +833,26 @@
       if (e.key === 'Escape') { e.preventDefault(); closeSheet(); }
       return;
     }
+    if (historyOpen) {
+      if (e.key === 'Escape' || e.key === 'h' || e.key === 'H') { e.preventDefault(); closeHistory(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); $('history-prev').click(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); $('history-next').click(); }
+      return;
+    }
     const onButton = e.target.closest && e.target.closest('button');
     switch (e.key) {
       case 'ArrowLeft': e.preventDefault(); pass(); break;
       case 'ArrowRight': e.preventDefault(); reveal(); break;
-      case 'ArrowUp': e.preventDefault(); openSheet(); break;
+      case 'ArrowUp': e.preventDefault(); openTopSheet(); break;
       case 'Enter':
       case ' ':
         if (onButton) return;
         e.preventDefault();
-        if (state.revealed) openSheet(); else reveal();
+        if (state.revealed) openTopSheet(); else reveal();
         break;
       case 's': case 'S': reshuffle(); break;
       case 'd': case 'D': openPicker(); break;
+      case 'h': case 'H': openHistory(); break;
       default:
     }
   });

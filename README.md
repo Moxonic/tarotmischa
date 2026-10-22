@@ -19,7 +19,8 @@ All images are public-domain scans from Wikimedia Commons, recompressed into `de
 - **Swipe left** to pass the card. **Swipe right** to turn it over. **Tap** a revealed card to read its meaning.
 - About 30% of cards come up reversed, and the panel then shows the reversed meaning first.
 - Tap the deck name at the top to switch decks. Each deck remembers where you were.
-- Keyboard: `←` pass, `→` reveal, `Enter` / `↑` read, `Esc` close, `S` reshuffle, `D` change deck.
+- The history button (two cards) shows the cards you have revealed, five at a time, newest on the right. Scroll back for earlier cards, or tap one to read it again. Turn your phone sideways for larger cards.
+- Keyboard: `←` pass, `→` reveal, `Enter` / `↑` read, `Esc` close, `S` reshuffle, `D` change deck, `H` history.
 
 ## The code
 
