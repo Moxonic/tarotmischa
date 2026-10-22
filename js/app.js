@@ -653,79 +653,45 @@
     updateHistoryNav();
   }
 
-  /* Upright phone: a grid sized so the cards are as large as possible. If every revealed card fits
-     on one screen they all show at once; otherwise whole rows fill the screen and earlier cards are
-     a scroll up. On a sideways screen the track stays a strip of five. */
-  const portraitQuery = matchMedia('(orientation: portrait)');
-  const GRID_GAP = 12;
+  /* One line of cards, each lying with its long side along the screen's short side, as large as the
+     screen allows. Upright phone: the cards lie sideways across the full width in one column.
+     Sideways phone or wide screen: they stand upright at full height in one row. */
   const CAPTION_H = 44;     // caption (two lines) plus the space above it
 
   function layoutHistory() {
-    const grid = portraitQuery.matches;
-    historyEl.classList.toggle('is-grid', grid);
-    trackEl.style.height = '';
-    if (!grid) return;
     const cs = getComputedStyle(trackEl);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    // stretch the track over the free space just long enough to measure it
-    trackEl.style.flex = '1 1 0';
-    trackEl.style.marginBlock = '0';
     const W = trackEl.clientWidth - padX;
     const H = trackEl.clientHeight - padY;
-    trackEl.style.flex = '';
-    trackEl.style.marginBlock = '';
     const r = deck.ratio;
-    const n = Math.max(1, state.history.length);
-    const colW = (c) => (W - (c - 1) * GRID_GAP) / c;
-    // the widest card that fits c columns and k whole rows on screen
-    const fitW = (c, k) => Math.min(colW(c), ((H - (k - 1) * GRID_GAP) / k - CAPTION_H) * r);
-
-    // cards never get smaller than three across a phone (two on very narrow screens)
-    const maxCols = Math.max(2, Math.floor((W + GRID_GAP) / (110 + GRID_GAP)));
-    const smallest = colW(maxCols) * 0.85;
-
-    // If every card can be shown at once, use the column count that makes them largest.
-    let cols = 0, rows = 0, w = 0;
-    for (let c = 1; c <= maxCols; c++) {
-      const k = Math.ceil(n / c);
-      const cw = fitW(c, k);
-      if (cw > w) { cols = c; rows = k; w = cw; }
-    }
-    // Otherwise fill the screen with as many whole rows as fit without shrinking the cards much;
-    // earlier cards are a scroll up.
-    if (w < smallest) {
-      cols = maxCols;
-      rows = 1;
-      while (rows < Math.ceil(n / cols) && fitW(cols, rows + 1) >= smallest) rows++;
-      w = fitW(cols, rows);
-    }
-
-    const rowH = w / r + CAPTION_H;
-    trackEl.style.setProperty('--cols', cols);
-    trackEl.style.setProperty('--col-w', `${w}px`);
-    trackEl.style.setProperty('--row-h', `${rowH}px`);
-    // only whole rows: trim the track to fit them exactly
-    trackEl.style.height = `${rows * rowH + (rows - 1) * GRID_GAP + padY}px`;
+    const sideways = H > W;
+    historyEl.classList.toggle('is-sideways', sideways);
+    // long side of the card spans the short side of the screen
+    let long = sideways ? W : H - CAPTION_H;
+    if (sideways) long = Math.min(long, (H - CAPTION_H) / r);   // short side must still fit
+    else long = Math.min(long, W / r);
+    const short = long * r;
+    trackEl.style.setProperty('--box-w', `${sideways ? long : short}px`);
+    trackEl.style.setProperty('--box-h', `${sideways ? short : long}px`);
+    trackEl.style.setProperty('--img-w', `${short}px`);
+    trackEl.style.setProperty('--img-h', `${long}px`);
   }
 
-  const isGrid = () => historyEl.classList.contains('is-grid');
-  function pageSize() {
-    return isGrid() ? trackEl.clientHeight - parseFloat(getComputedStyle(trackEl).paddingTop) * 2 + GRID_GAP : trackEl.clientWidth;
-  }
+  const isVertical = () => historyEl.classList.contains('is-sideways');
   function scrollHistory(dir) {
-    const d = dir * pageSize();
-    trackEl.scrollBy({ [isGrid() ? 'top' : 'left']: d, behavior: reduced ? 'auto' : 'smooth' });
+    const page = isVertical() ? trackEl.clientHeight : trackEl.clientWidth;
+    trackEl.scrollBy({ [isVertical() ? 'top' : 'left']: dir * page * 0.9, behavior: reduced ? 'auto' : 'smooth' });
   }
   function updateHistoryNav() {
-    const grid = isGrid();
-    const pos = grid ? trackEl.scrollTop : trackEl.scrollLeft;
-    const max = grid ? trackEl.scrollHeight - trackEl.clientHeight : trackEl.scrollWidth - trackEl.clientWidth;
+    const v = isVertical();
+    const pos = v ? trackEl.scrollTop : trackEl.scrollLeft;
+    const max = v ? trackEl.scrollHeight - trackEl.clientHeight : trackEl.scrollWidth - trackEl.clientWidth;
     $('history-prev').disabled = pos <= 2;
     $('history-next').disabled = pos >= max - 2;
   }
   function scrollHistoryToEnd() {
-    // start at the most recent cards; scroll back for earlier ones
+    // start at the most recent card; scroll back for earlier ones
     trackEl.scrollLeft = trackEl.scrollWidth;
     trackEl.scrollTop = trackEl.scrollHeight;
     updateHistoryNav();

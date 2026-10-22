@@ -19,7 +19,7 @@ All images are public-domain scans from Wikimedia Commons, recompressed into `de
 - **Swipe left** to pass the card. **Swipe right** to turn it over. **Tap** a revealed card to read its meaning.
 - About 30% of cards come up reversed, and the panel then shows the reversed meaning first.
 - Tap the deck name at the top to switch decks. Each deck remembers where you were.
-- The history button (two cards) shows the cards you have revealed. On an upright phone they fill the screen in a grid, as many whole cards as fit and as large as possible. Sideways, they show five at a time. It opens at the newest card: scroll back for earlier ones, or tap a card to read it again.
+- The history button (two cards) shows the cards you have revealed in a single line, each as large as the screen allows, with its long side across the short side of the screen. On an upright phone the cards lie sideways in one column; turned sideways, they stand in one row. It opens at the newest card: scroll back for earlier ones, or tap a card to read it again.
 - Keyboard: `←` pass, `→` reveal, `Enter` / `↑` read, `Esc` close, `S` reshuffle, `D` change deck, `H` history.
 
 ## The code
@@ -28,5 +28,5 @@ Plain HTML, CSS and JavaScript, with no build step and no backend.
 
 - `js/data.js`: meanings, including the extra Minchiate and Etteilla trumps.
 - `js/backs.js`: a card back for each deck.
-- `js/netlify.js`: closes or hides any badge or drawer that Netlify injects into the page.
+- `js/netlify.js` and a rule at the top of `css/style.css`: hide the badge and toolbar that Netlify injects into the page.
 - `js/app.js`: the deck, gestures and animations.

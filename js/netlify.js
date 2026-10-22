@@ -4,11 +4,14 @@
   'use strict';
 
   const MATCH = /netlify/i;
-  const OURS = '.app, .sheet, .scrim, .picker, .sky, #announce';
+  // the HUD script mounts its badge as iframe#nl-badge-frame (owner toolbar: #nl-hud-frame)
+  const FRAME_IDS = /^nl-(badge|hud)-frame$/;
+  const OURS = '.app, .sheet, .scrim, .picker, .history, .sky, #announce';
 
   function isNetlify(el) {
     if (!(el instanceof Element) || el.closest(OURS) || /^(SCRIPT|LINK|STYLE|META)$/.test(el.tagName)) return false;
-    const attrs = [el.id, el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className,
+    if (FRAME_IDS.test(el.id)) return true;
+    const attrs = [el.id, el.getAttribute('title'), el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className,
       el.getAttribute('src'), el.getAttribute('href'), el.getAttribute('aria-label'), el.tagName];
     if (attrs.some((a) => a && MATCH.test(String(a)))) return true;
     if (el.shadowRoot && MATCH.test(el.shadowRoot.textContent || '')) return true;
