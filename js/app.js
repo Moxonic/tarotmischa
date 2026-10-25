@@ -47,7 +47,7 @@
   let busy = false;
   let sheetOpen = false;
   let sheetOpenedAt = 0;
-  let pickerOpen = true;
+  let pickerOpen = false;
   let historyOpen = false;
   let haloLevel = 0;
 
@@ -948,9 +948,9 @@
     }
   });
 
-  /* ---------- start: always ask which deck ---------- */
+  /* ---------- start: the last deck used, or Rider Waite Smith the first time ---------- */
 
+  const DEFAULT_DECK = 'rws';
   deckEl.classList.toggle('rm', reduced);
-  renderPicker();
-  picker.setAttribute('aria-hidden', 'false');
+  chooseDeck(DECKS.some((d) => d.id === saved.last) ? saved.last : DEFAULT_DECK);
 })();

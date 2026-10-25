@@ -1,6 +1,6 @@
 # Night Tarot
 
-A mobile-first tarot app you explore by swiping. It opens by asking which of seven historical decks to use. That deck is then shuffled face down.
+A mobile-first tarot app you explore by swiping, with seven historical decks to choose from. It opens with the Rider Waite Smith deck, or the deck you used last, shuffled face down. Tap the deck name at the top to switch.
 
 | Deck | Era | Cards | Scans |
 | --- | --- | --- | --- |
